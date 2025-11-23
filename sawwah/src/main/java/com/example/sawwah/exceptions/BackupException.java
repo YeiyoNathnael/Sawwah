@@ -1,7 +1,0 @@
-package com.example.sawwah.exceptions;
-
-public class BackupException extends RuntimeException {
-    public BackupException(String message) {
-        super(message);
-    }
-}

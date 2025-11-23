@@ -77,4 +77,44 @@ Load 425k events → Switches to HashMap at 200
 Search E599999   → Uses HashMap (instant!)
 ```
 
-That's it. Small data = simple search. Big data = fast search. Pattern handles the switching.
+#
+# New Features & Changes (Nov 2025)
+
+## 1. Custom Exception Hierarchy
+- Introduced 15+ custom exceptions (e.g., `InvalidEventException`, `EventNotFoundException`, `CSVFormatException`, etc.)
+- All validation, file I/O, and business logic now use these exceptions for robust error handling
+- Cleaner error messages and easier debugging
+
+## 2. Event ID Uniqueness
+- Every event now has a unique `id` (UUID)
+- Prevents accidental collisions when adding events
+- Duplicate IDs are ignored, ensuring data integrity
+
+## 3. Duplicate Name Handling in UI
+- When removing by name, if multiple events share the same name, the UI lists all and prompts for which one to remove
+- Prevents accidental deletion of the wrong event
+- User selects by event number or ID
+
+## 4. Comprehensive Automated Testing
+- Added `Test.java` covering all main features:
+    - Data loading from CSV
+    - Adding events (including duplicate and unique cases)
+    - Searching (including duplicates and non-existent)
+    - Removing events (with/without duplicates)
+    - Statistics and analytics
+    - Backup and restore
+    - Tree visualization
+- Ensures all features work as expected and exceptions are thrown correctly
+
+## 5. Codebase Refactoring
+- All main classes (`Event.java`, `DataManager.java`, `SawwahTree.java`, `Sawwah.java`) updated to use new exceptions and ID logic
+- Improved validation and error handling throughout
+- Consistent interface for event operations
+
+## 6. Summary
+- The system is now more robust, user-friendly, and maintainable
+- Data integrity is enforced at every step
+- All main features are covered by automated tests
+
+---
+**This update brings production-level reliability and clarity to the Sawwah event management system.**
