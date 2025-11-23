@@ -1,5 +1,6 @@
-package com.example.sawwah;
 
+
+package com.example.sawwah;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import com.example.sawwah.exceptions.*;
 
 public class DataManager {
 
@@ -31,38 +33,35 @@ private static List<String> eventBackUpFiles = new ArrayList<>();
         File file = new File(fileDirectory);
         try (Scanner scanner = new Scanner(file)) {
             while (scanner.hasNextLine()) {
-                // 1. Get the raw string for one event (e.g., "National Day,Dubai,2025-11-20")
-                // This reads until the next newline character.
                 String rawRecord = scanner.nextLine().trim();
-
                 if (rawRecord.isEmpty())
-                    continue; // Skip empty records
-
-                String[] properties = rawRecord.split(","); // 2. Split properties by comma
-
-                // 3. Safety check to ensure we have enough columns
+                    continue;
+                String[] properties = rawRecord.split(",");
                 if (properties.length >= 6) {
-                    String name = properties[0].trim();
-                    LocalDateTime eventStartDate = LocalDateTime.parse(properties[1].trim());
-                    LocalDateTime eventEndDate = LocalDateTime.parse(properties[2].trim());
-                    String eventLocation = properties[3].trim();
-                    String eventCategory = properties[4].trim();
-                    int eventPriority = Integer.parseInt(properties[5].trim());
-
-                    // Create and add the object
-                    eventList.add(
-                            new Event(name, eventStartDate, eventEndDate, eventLocation, eventCategory, eventPriority));
+                    try {
+                        String name = properties[0].trim();
+                        LocalDateTime eventStartDate = LocalDateTime.parse(properties[1].trim());
+                        LocalDateTime eventEndDate = LocalDateTime.parse(properties[2].trim());
+                        String eventLocation = properties[3].trim();
+                        String eventCategory = properties[4].trim();
+                        int eventPriority = Integer.parseInt(properties[5].trim());
+                        eventList.add(new Event(name, eventStartDate, eventEndDate, eventLocation, eventCategory, eventPriority));
+                        SawwahTree.settotalEvents(1);
+                    } catch (Exception e) {
+                        throw new DataLoadException("Invalid event data in CSV: " + rawRecord + ". " + e.getMessage());
+                    }
                 } else {
-                    System.err.println("Incorrect File Format " + rawRecord);
+                    throw new CSVFormatException("Incorrect File Format: " + rawRecord);
                 }
             }
         } catch (FileNotFoundException e) {
-            System.err.println("File not found: " + fileDirectory); // Using the correct variable name
-            e.printStackTrace();
+            throw new DataLoadException("File not found: " + fileDirectory);
+        } catch (CSVFormatException | DataLoadException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DataLoadException("Error loading data: " + e.getMessage());
         }
-
         return eventList;
-
     }
 
     
@@ -72,15 +71,10 @@ private static List<String> eventBackUpFiles = new ArrayList<>();
     public static boolean saveBackup(Map<LocalDateTime, List<Event>> data, String fileDirectory) {
         File backupFile = new File(fileDirectory);
         try (BufferedWriter saveEvent = new BufferedWriter(new FileWriter(backupFile))) {
-
-            // Register the backup file
-             String path = backupFile.getAbsolutePath();
+            String path = backupFile.getAbsolutePath();
             if (!eventBackUpFiles.contains(path)) {
                 eventBackUpFiles.add(path);
             }
-           
-
-            // Loop through the time-event map
             for (Map.Entry<LocalDateTime, List<Event>> entry : data.entrySet()) {
                 for (Event e : entry.getValue()) {
                     StringBuilder sb = new StringBuilder();
@@ -91,16 +85,11 @@ private static List<String> eventBackUpFiles = new ArrayList<>();
                             .append(e.category).append(",")
                             .append(e.priority).append("\n");
                     saveEvent.write(sb.toString());
-                   
                 }
-                
             }
-
             return true;
-
         } catch (IOException e) {
-            System.out.print("Error:"+ e.getMessage()+ " Unable to save backup to " + fileDirectory);
-            return false;
+            throw new BackupException("Unable to save backup to " + fileDirectory + ": " + e.getMessage());
         }
     }
 

@@ -3,7 +3,19 @@ package com.example.sawwah;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
+
+import com.example.sawwah.exceptions.BackupException;
+import com.example.sawwah.exceptions.BackupSaveException;
+import com.example.sawwah.exceptions.CSVFormatException;
+import com.example.sawwah.exceptions.DataLoadException;
+import com.example.sawwah.exceptions.EmptyDataSetException;
+import com.example.sawwah.exceptions.EventNotFoundException;
+import com.example.sawwah.exceptions.InvalidEventException;
 
 public class Sawwah {
     
@@ -96,72 +108,54 @@ public class Sawwah {
         System.out.println("\n--- Load Data from CSV ---");
         System.out.print("Enter CSV file path (or press Enter for 'TestData.csv'): ");
         String filePath = scanner.nextLine().trim();
-        
         if (filePath.isEmpty()) {
             filePath = "/home/nyeiyo/Sawwah/TestData.csv";
         }
-        
         System.out.println("Loading events from: " + filePath);
-        List<Event> events = DataManager.loadDataFromFiles(filePath);
-        
-        if (events.isEmpty()) {
-            System.out.println("✗ No events loaded. Check file format or path.");
-            return;
+        try {
+            List<Event> events = DataManager.loadDataFromFiles(filePath);
+            if (events.isEmpty()) {
+                System.out.println("✗ No events loaded. Check file format or path.");
+                return;
+            }
+            for (Event event : events) {
+                system.addEvent(event);
+            }
+            System.out.println("✓ Successfully loaded " + events.size() + " events!");
+        } catch (CSVFormatException | DataLoadException | InvalidEventException e) {
+            System.out.println("✗ Error loading data: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("✗ Unexpected error: " + e.getMessage());
         }
-        
-        for (Event event : events) {
-            system.addEvent(event);
-        }
-        
-        System.out.println("✓ Successfully loaded " + events.size() + " events!");
     }
     
     // ========== OPTION 2: ADD EVENT ==========
     private static void addEvent() {
         System.out.println("\n--- Add New Event ---");
-        
         try {
             System.out.print("Event Name: ");
             String name = scanner.nextLine().trim();
-            if (name.isEmpty()) {
-                System.out.println("✗ Event name cannot be empty.");
-                return;
-            }
-            
             System.out.print("Start Time (YYYY-MM-DDTHH:MM, e.g., 2025-12-01T14:30): ");
             String startStr = scanner.nextLine().trim();
-            LocalDateTime startTime = LocalDateTime.parse(startStr, formatter);
-            
             System.out.print("End Time (YYYY-MM-DDTHH:MM): ");
             String endStr = scanner.nextLine().trim();
-            LocalDateTime endTime = LocalDateTime.parse(endStr, formatter);
-            
-            if (endTime.isBefore(startTime)) {
-                System.out.println("✗ End time cannot be before start time.");
-                return;
-            }
-            
             System.out.print("Location (Emirate): ");
             String location = scanner.nextLine().trim();
-            
             System.out.print("Category (Cultural/Educational/Charity): ");
             String category = scanner.nextLine().trim();
-            
             System.out.print("Priority (1-5): ");
             int priority = Integer.parseInt(scanner.nextLine().trim());
-            if (priority < 1 || priority > 5) {
-                System.out.println("✗ Priority must be between 1 and 5.");
-                return;
-            }
-            
+            LocalDateTime startTime = LocalDateTime.parse(startStr, formatter);
+            LocalDateTime endTime = LocalDateTime.parse(endStr, formatter);
             Event newEvent = new Event(name, startTime, endTime, location, category, priority);
             system.addEvent(newEvent);
             System.out.println("✓ Event added successfully!");
-            
         } catch (DateTimeParseException e) {
             System.out.println("✗ Invalid date format. Use YYYY-MM-DDTHH:MM (e.g., 2025-12-01T14:30)");
         } catch (NumberFormatException e) {
             System.out.println("✗ Invalid number format for priority.");
+        } catch (InvalidEventException e) {
+            System.out.println("✗ Invalid event: " + e.getMessage());
         } catch (Exception e) {
             System.out.println("✗ Error adding event: " + e.getMessage());
         }
@@ -172,17 +166,48 @@ public class Sawwah {
         System.out.println("\n--- Remove Event ---");
         System.out.print("Enter event name to remove: ");
         String name = scanner.nextLine().trim();
-        
         if (name.isEmpty()) {
             System.out.println("✗ Event name cannot be empty.");
             return;
         }
-        
-        boolean removed = system.removeEvent(name);
-        if (removed) {
-            System.out.println("✓ Event '" + name + "' removed successfully!");
-        } else {
-            System.out.println("✗ Event '" + name + "' not found.");
+        try {
+            // Get all events with this name
+            List<Event> events = ((SawwahTree) system).getEventsByName(name);
+            if (events.isEmpty()) {
+                throw new EventNotFoundException(name);
+            }
+            
+            if (events.size() == 1) {
+                // Only one event, remove it directly
+                boolean removed = system.removeEvent(name);
+                if (removed) {
+                    System.out.println("✓ Event '" + name + "' removed successfully!");
+                }
+            } else {
+                // Multiple events, let user choose
+                System.out.println("\nMultiple events found with name '" + name + "':");
+                for (int i = 0; i < events.size(); i++) {
+                    Event e = events.get(i);
+                    System.out.println((i + 1) + ". " + e.name + " (ID: " + e.id + ", Start: " + e.startTime + ", Location: " + e.location + ")");
+                }
+                System.out.print("Enter the number of the event to remove (1-" + events.size() + "): ");
+                int choice = Integer.parseInt(scanner.nextLine().trim());
+                if (choice < 1 || choice > events.size()) {
+                    System.out.println("✗ Invalid choice.");
+                    return;
+                }
+                Event selected = events.get(choice - 1);
+                boolean removed = ((SawwahTree) system).removeEventById(selected.id);
+                if (removed) {
+                    System.out.println("✓ Event '" + selected.name + "' (ID: " + selected.id + ") removed successfully!");
+                }
+            }
+        } catch (EventNotFoundException e) {
+            System.out.println("✗ " + e.getMessage());
+        } catch (NumberFormatException e) {
+            System.out.println("✗ Invalid number format for choice.");
+        } catch (Exception e) {
+            System.out.println("✗ Error removing event: " + e.getMessage());
         }
     }
     
@@ -191,80 +216,76 @@ public class Sawwah {
         System.out.println("\n--- Search Event ---");
         System.out.print("Enter event name to search: ");
         String name = scanner.nextLine().trim();
-        
         if (name.isEmpty()) {
             System.out.println("✗ Event name cannot be empty.");
             return;
         }
-        
-        // Start timing
         long startTime = System.nanoTime();
-        
-        Event found = system.searchEvent(name);
-        
-        // End timing
-        long endTime = System.nanoTime();
-        long duration = endTime - startTime;
-        
-        if (found != null) {
-            System.out.println("\n✓ Event Found:");
-            System.out.println("  Name:     " + found.name);
-            System.out.println("  Start:    " + found.startTime);
-            System.out.println("  End:      " + found.endTime);
-            System.out.println("  Location: " + found.location);
-            System.out.println("  Category: " + found.category);
-            System.out.println("  Priority: " + found.priority);
-            System.out.println("  ID:       " + found.id);
+        try {
+            Event found = system.searchEvent(name);
+            long endTime = System.nanoTime();
+            long duration = endTime - startTime;
+            if (found != null) {
+                System.out.println("\n✓ Event Found:");
+                System.out.println("  Name:     " + found.name);
+                System.out.println("  Start:    " + found.startTime);
+                System.out.println("  End:      " + found.endTime);
+                System.out.println("  Location: " + found.location);
+                System.out.println("  Category: " + found.category);
+                System.out.println("  Priority: " + found.priority);
+                System.out.println("  ID:       " + found.id);
+                System.out.println("\n⏱  Search Time: " + duration + " nanoseconds (" + String.format("%.6f", duration / 1_000_000.0) + " ms)");
+            } else {
+                throw new EventNotFoundException(name);
+            }
+        } catch (EventNotFoundException e) {
+            long endTime = System.nanoTime();
+            long duration = endTime - startTime;
+            System.out.println("✗ " + e.getMessage());
             System.out.println("\n⏱  Search Time: " + duration + " nanoseconds (" + String.format("%.6f", duration / 1_000_000.0) + " ms)");
-        } else {
-            System.out.println("✗ Event '" + name + "' not found.");
-            System.out.println("\n⏱  Search Time: " + duration + " nanoseconds (" + String.format("%.6f", duration / 1_000_000.0) + " ms)");
+        } catch (Exception e) {
+            System.out.println("✗ Error searching event: " + e.getMessage());
         }
     }
     
     // ========== OPTION 5: SHOW STATISTICS ==========
     private static void showStats() {
         System.out.println("\n--- Event Statistics ---");
-        
-        // Get all events from the system
-        Map<LocalDateTime, List<Event>> rawMap = system.getRawMap();
-        List<Event> allEvents = new ArrayList<>();
-        for (List<Event> eventList : rawMap.values()) {
-            allEvents.addAll(eventList);
-        }
-        
-        if (allEvents.isEmpty()) {
-            System.out.println("✗ No events in the system.");
-            return;
-        }
-        
-        System.out.println("\nTotal Events: " + allEvents.size());
-        
-        // Emirate Statistics
-        System.out.println("\n--- Events by Emirate ---");
-        Map<String, Integer> emirateStats = DataManager.getEmirateStatus(allEvents);
-        for (Map.Entry<String, Integer> entry : emirateStats.entrySet()) {
-            System.out.println("  " + entry.getKey() + ": " + entry.getValue() + " events");
-        }
-        
-        // Category Statistics
-        System.out.println("\n--- Events by Category ---");
-        Map<String, Integer> categoryStats = new HashMap<>();
-        for (Event e : allEvents) {
-            categoryStats.put(e.category, categoryStats.getOrDefault(e.category, 0) + 1);
-        }
-        for (Map.Entry<String, Integer> entry : categoryStats.entrySet()) {
-            System.out.println("  " + entry.getKey() + ": " + entry.getValue() + " events");
-        }
-        
-        // Trending Events
-        System.out.println("\n--- Top 5 Trending Events ---");
-        DataManager dm = new DataManager();
-        List<Event> trending = dm.getTrendingEventsEvents(allEvents, 5);
-        int rank = 1;
-        for (Event e : trending) {
-            System.out.println("  " + rank + ". " + e.name + " (Priority: " + e.priority + ", Location: " + e.location + ")");
-            rank++;
+        try {
+            Map<LocalDateTime, List<Event>> rawMap = system.getRawMap();
+            List<Event> allEvents = new ArrayList<>();
+            for (List<Event> eventList : rawMap.values()) {
+                allEvents.addAll(eventList);
+            }
+            if (allEvents.isEmpty()) {
+                throw new EmptyDataSetException("No events in the system.");
+            }
+            System.out.println("\nTotal Events: " + allEvents.size());
+            System.out.println("\n--- Events by Emirate ---");
+            Map<String, Integer> emirateStats = DataManager.getEmirateStatus(allEvents);
+            for (Map.Entry<String, Integer> entry : emirateStats.entrySet()) {
+                System.out.println("  " + entry.getKey() + ": " + entry.getValue() + " events");
+            }
+            System.out.println("\n--- Events by Category ---");
+            Map<String, Integer> categoryStats = new HashMap<>();
+            for (Event e : allEvents) {
+                categoryStats.put(e.category, categoryStats.getOrDefault(e.category, 0) + 1);
+            }
+            for (Map.Entry<String, Integer> entry : categoryStats.entrySet()) {
+                System.out.println("  " + entry.getKey() + ": " + entry.getValue() + " events");
+            }
+            System.out.println("\n--- Top 5 Trending Events ---");
+            DataManager dm = new DataManager();
+            List<Event> trending = dm.getTrendingEventsEvents(allEvents, 5);
+            int rank = 1;
+            for (Event e : trending) {
+                System.out.println("  " + rank + ". " + e.name + " (Priority: " + e.priority + ", Location: " + e.location + ")");
+                rank++;
+            }
+        } catch (EmptyDataSetException e) {
+            System.out.println("✗ " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("✗ Error showing statistics: " + e.getMessage());
         }
     }
     
@@ -273,19 +294,22 @@ public class Sawwah {
         System.out.println("\n--- Backup Events ---");
         System.out.print("Enter backup file path (e.g., backup_events.csv): ");
         String filePath = scanner.nextLine().trim();
-        
         if (filePath.isEmpty()) {
             System.out.println("✗ File path cannot be empty.");
             return;
         }
-        
         Map<LocalDateTime, List<Event>> data = system.getRawMap();
-        boolean success = DataManager.saveBackup(data, filePath);
-        
-        if (success) {
-            System.out.println("✓ Backup saved successfully to: " + filePath);
-        } else {
-            System.out.println("✗ Failed to save backup.");
+        try {
+            boolean success = DataManager.saveBackup(data, filePath);
+            if (success) {
+                System.out.println("✓ Backup saved successfully to: " + filePath);
+            } else {
+                throw new BackupSaveException(filePath);
+            }
+        } catch (BackupException e) {
+            System.out.println("✗ " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("✗ Error during backup: " + e.getMessage());
         }
     }
     
@@ -340,3 +364,6 @@ public class Sawwah {
         System.out.println("✓ Total Events: " + totalEvents);
     }
 }
+
+
+// batch

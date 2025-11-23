@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-public class LinearStrategy implements SearchStrategy {
+public class LinearStrategy extends  SearchStrategy {
     
     @Override
     public Event find(String name, TreeMap<LocalDateTime, List<Event>> tree, Map<String, Event> nameIndex) {
